@@ -5,12 +5,31 @@ import tensorflow as tf
 import random
 import matplotlib.pyplot as plt
 import matplotlib as mp
-from PIL import Image
+from PIL import Image, ImageChops
 import pylab
 import os
+import math
+#import ImageChops
+#import ImageOps
 
 # --------------------------------------------------
 # setup
+
+
+def getActivations(layer,stimuli):
+    units = sess.run(layer,feed_dict={tf_data:stimuli,keep_prob:1.0})
+    plotNNFilter(units)
+
+def plotNNFilter(units):
+    filters = units.shape[3]
+    plt.figure(1, figsize=(20,20))
+    n_columns = 6
+    n_rows = math.ceil(filters / n_columns) + 1
+    for i in range(filters):
+        plt.subplot(n_rows, n_columns, i+1)
+        plt.title('Filter ' + str(i))
+        plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
+
 
 def variable_summaries(var):
     #"""Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -94,12 +113,13 @@ ntest = 100
 nclass = 10
 imsize = 28
 nchannels = 1
-batchsize = 50
+batchsize = 68
+nsamples = 3*ntrain*nclass
 result_dir = './results/' # directory where the results from the training are saved
 
-Train = np.zeros((ntrain*nclass,imsize,imsize,nchannels))
+Train = np.zeros((3*ntrain*nclass,imsize,imsize,nchannels))
 Test = np.zeros((ntest*nclass,imsize,imsize,nchannels))
-LTrain = np.zeros((ntrain*nclass,nclass))
+LTrain = np.zeros((3*ntrain*nclass,nclass))
 LTest = np.zeros((ntest*nclass,nclass))
 
 itrain = -1
@@ -107,18 +127,54 @@ itest = -1
 for iclass in range(0, nclass):
     for isample in range(0, ntrain):
         path = 'Data/CIFAR10/Train/%d/Image%05d.png' % (iclass,isample)
-        im = misc.imread(path); # 28 by 28
+        im = misc.imread(path) # 28 by 28
+        imTest1 = Image.fromarray(im, 'L')
         im = im.astype(float)/255
         itrain += 1
+        #print("im")
+        #print(type(im))
+
         Train[itrain,:,:,0] = im
         LTrain[itrain,iclass] = 1 # 1-hot lable
+        #print(Train[itrain+ntrain*nclass,:,:,0])
+        #print(im.shape)
+        im = imTest1 #Image.fromarray(imTest1, 'L')
+        #imTest2 = im.transpose(Image.FLIP_LEFT_RIGHT)#Image.fromarray(greyscale_map, 'L')
+        #print(im.transpose(Image.FLIP_LEFT_RIGHT))
+        greyscale_map = np.asarray(im.transpose(Image.FLIP_LEFT_RIGHT))
+        #greyscale_map = greyscale_map.T
+        #imTest2 = Image.fromarray(greyscale_map, 'L')
+        #greyscale_map = np.array(greyscale_map).reshape(28,28)
+        #imTest2 = greyscale_map
+        greyscale_map = greyscale_map.astype(float)/255
+
+        #imTest1.show()
+        #imTest2.show()
+        #input()
+        #print(greyscale_map)
+        #numpy.array(greyscale_map)
+        Train[itrain+ntrain*nclass,:,:,0] = greyscale_map
+        LTrain[itrain+ntrain*nclass,iclass] = 1
+
+        im = imTest1  # Image.fromarray(imTest1, 'L')
+        greyscale_map = np.asarray(ImageChops.offset(im, random.randint(-2, 2),random.randint(-2,2)))
+        greyscale_map = greyscale_map.astype(float) / 255
+
+        Train[itrain + 2*ntrain * nclass, :, :, 0] = greyscale_map
+        LTrain[itrain + 2*ntrain * nclass, iclass] = 1
     for isample in range(0, ntest):
         path = 'Data/CIFAR10/Test/%d/Image%05d.png' % (iclass,isample)
-        im = misc.imread(path); # 28 by 28
+        im = misc.imread(path) # 28 by 28
         im = im.astype(float)/255
         itest += 1
         Test[itest,:,:,0] = im
         LTest[itest,iclass] = 1 # 1-hot lable
+
+#subtract per pixel mean over each image
+#imgs -= imgs.mean(axis=(-2, -1), keepdims=1)
+
+#subtract per pixel mean over all images
+#imgs -= imgs.mean(axis=(0,-2,-1),keepdims=1)
 
 # Show image as a check
 #img = Train[2,:,:,0]
@@ -130,7 +186,7 @@ sess = tf.InteractiveSession()
 
 tf_data = tf.placeholder(tf.float32, shape=[None, imsize, imsize, nchannels])  #tf variable for the data, remember shape is [None, width, height, numberOfChannels]
 tf_labels = tf.placeholder(tf.float32, shape=[None, nclass])  #tf variable for labels
-
+tf_dataAct = tf.placeholder(tf.float32, shape=[None,imsize, imsize, nchannels])
 # --------------------------------------------------
 # model
 #create your model
@@ -147,20 +203,20 @@ h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
 # Max Pooling layer subsampling by 2
 h_pool1 = max_pool_2x2(h_conv1)
 
+
 # Adding a name scope ensures logical grouping of the layers in the graph.
 with tf.name_scope('ConvLayer1'):
     # This Variable will hold the state of the weights for the layer
-    with tf.name_scope('weights'):
-        #weights = weight_variable([input_dim, output_dim])
-        variable_summaries(W_conv1)
-    with tf.name_scope('biases'):
-        #biases = bias_variable([output_dim])
-        variable_summaries(b_conv1)
+    #with tf.name_scope('weights'):
+        # weights = weight_variable([input_dim, output_dim])
+    #    variable_summaries(W_conv1)
+    #with tf.name_scope('biases'):
+        # biases = bias_variable([output_dim])
+    #    variable_summaries(b_conv1)
     with tf.name_scope('Wx_plus_b'):
         variable_summaries(h_conv1)
-    with tf.name_scope('max_pool_2x2'):
-        variable_summaries(h_pool1)
-
+    #with tf.name_scope('max_pool_2x2'):
+    #    variable_summaries(h_pool1)
 # Second Layer
 
 # Conv layer with kernal 5x5 and 64 filter maps followed by ReLu activation
@@ -168,6 +224,20 @@ W_conv2 = weight_variable([5, 5, 32, 64])
 b_conv2 = bias_variable([64])
 h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
 h_pool2 = max_pool_2x2(h_conv2)
+
+with tf.name_scope('ConvLayer2'):
+    # This Variable will hold the state of the weights for the layer
+    #with tf.name_scope('weights'):
+        # weights = weight_variable([input_dim, output_dim])
+    #    variable_summaries(W_conv1)
+    #with tf.name_scope('biases'):
+        # biases = bias_variable([output_dim])
+    #    variable_summaries(b_conv1)
+    with tf.name_scope('Wx_plus_b'):
+        variable_summaries(h_conv2)
+    #with tf.name_scope('max_pool_2x2'):
+    #    variable_summaries(h_pool1)
+
 
 # FC layer that has input 7*7*64 vector and output 1024
 W_fc1 = weight_variable([7*7*64, 1024])
@@ -194,7 +264,20 @@ with tf.name_scope('cross_prediction'):
 tf.summary.scalar("cross_entropy", cross_entropy)
 #set up the loss, optimization, evaluation, and accuracy
 
+batch = tf.Variable(0)
+
+learning_rate = tf.train.exponential_decay(
+    0.05,   #0.05             # Base learning rate.
+    batch * batchsize,  # Current index into the dataset.
+    0.3,          # Decay step.
+    0.95,                # Decay rate.
+    staircase=True)
+
 optimizer = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+#optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy)
+#momentum 0.9
+#optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9, name='Momentum').minimize(cross_entropy)
+
 correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.arg_max(tf_labels,1))
 with tf.name_scope('accuracy'):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
@@ -214,7 +297,7 @@ sess.run(init)
 
 batch_xs = np.zeros([batchsize, imsize, imsize, nchannels])  #setup as [batchsize, width, height, numberOfChannels] and use np.zeros()
 batch_ys = np.zeros([batchsize, nclass])  #setup as [batchsize, the how many classes]
-nsamples = ntrain*nclass
+batch_offset = np.zeros([batchsize,imsize,imsize,nchannels])
 hconTest = []
 centropyTest = []
 accTest = []
@@ -233,19 +316,28 @@ min2 = []
 testAcc = []
 trainAcc = []
 stepAcc = []
+acthcon1 = []
+acthcon2 = []
 
-max_step = 100
+max_step = 10000
 for i in range(max_step):  # try a small iteration size once it works then continue
     perm = np.arange(nsamples)
     np.random.shuffle(perm)
     for j in range(batchsize):
         batch_xs[j,:,:,:] = Train[perm[j],:,:,:]
         batch_ys[j,:] = LTrain[perm[j],:]
+        #imTestOff = []
+        #for nchan in range(nchannels):
+        #imTestOff = Image.fromarray(batch_xs[j,:,:,nchannels-1], 'L')
+        #imTestOff = ImageChops.offset(imTestOff, random.randint(-2, 2),random.randint(-2,2))
+
+        #batch_offset[j,:,:,:] = np.asarray(imTestOff).reshape(imsize,imsize,1) #Train[perm[j],:,:,:]
     if i%10 == 0:
         #calculate train accuracy and print it
         #print(cross_entropy.op.name)
         #summary_str, hcon1, centropy, acc, wcon1 = sess.run([summary_op, h_conv1, cross_entropy, accuracy, W_conv1], feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 0.5})
-        summary_str, hcon1, centropy = sess.run([summary_op, h_conv1, cross_entropy],feed_dict={tf_data: batch_xs, tf_labels: batch_ys,keep_prob: 0.5})
+        #summary_str, hcon1, hcon2, centropy = sess.run([summary_op, h_conv1, h_conv2, cross_entropy],feed_dict={tf_data: batch_xs, tf_labels: batch_ys,keep_prob: 0.5})
+        summary_str, hcon1, hcon2 = sess.run([summary_op, h_conv1, h_conv2], feed_dict={tf_data: Test, tf_labels: LTest,keep_prob: 1.0})
         #summary_str = sess.run(summary_op, feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 0.5})
         #print(acc)
         #hconTest.append(hcon1)
@@ -255,6 +347,10 @@ for i in range(max_step):  # try a small iteration size once it works then conti
         #summary_str, testacc, hcon1, hcon2 = sess.run([summary_op, accuracy, h_conv1, h_conv2], feed_dict={tf_data: Test, tf_labels: LTest, keep_prob: 1.0})
         summary_writer.add_summary(summary_str, i)
         summary_writer.flush()
+
+        #hcon11, hcon12 = sess.run([h_conv1, h_conv2], feed_dict={tf_data: Test, LTest: batch_ys, keep_prob: 0.5})
+        #acthcon1.append(hcon11)
+        #acthcon2.append(hcon12)
         #summary_str, centropy = sess.run([summary_op, cross_entropy.op.name], feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 0.5})
         #hcon1Test.append(hcon1)
         #hcon2Test.append(hcon2)
@@ -277,24 +373,119 @@ for i in range(max_step):  # try a small iteration size once it works then conti
         testAcc.append(test_accuracy)
         trainAcc.append(training_accuracy)
         stepAcc.append(i)
-        print("Train accuracy %g, after %d:" % (training_accuracy, i))
+        print("Train accuracy %g, Test accuracy %g, after %d:" % (training_accuracy,test_accuracy, i))
         #print("test accuracy %g" % (test_accuracy))
         checkpoint_file = os.path.join(result_dir, 'checkpoint')
         saver.save(sess, checkpoint_file, global_step=i)
     optimizer.run(feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 0.5}) # dropout only during training
-
+    #optimizer.run(feed_dict={tf_data: batch_offset, tf_labels: batch_ys, keep_prob: 0.3}) # dropout only during training
 # --------------------------------------------------
 # test
 #print(type(trainAcc))
 #print(trainAcc)
+#tf_dataAct = tf.placeholder(tf.float32, shape=[None,imsize, imsize, nchannels])  #tf variable for the data, remember shape is [None, width, height, numberOfChannels]
+#tf_labels = tf.placeholder(tf.float32, shape=[None, nclass])  #tf variable for labels
+
+#print(type(Test[0,:,:,:]))
+#print(type(Test))
+
+#TestTest = []
+#for i in range(2):
+#    TestTest.append(    )
+TestTest = np.zeros([1,imsize,imsize,nchannels])#np.array(Test[0,:,:,:])
+LTestTest = np.zeros((1,nclass))
+#batch_xs = np.zeros([batchsize, imsize, imsize, nchannels])
+for m in range(nclass):
+    TestTest[0,:,:,:] = Test[m*ntest,:,:,:]
+    LTestTest[0,:] = LTest[m*ntest,:]#np.zeros((ntest*nclass,nclass))
+    #print(type(TestTest))
+    #TestTest[1,:,:,:] = Test[0,:,:,:]
+    #TestTest = TestTest[None,:,:,:]
+    summary_str, units = sess.run([summary_op, h_conv1],feed_dict={tf_data: TestTest,tf_labels: LTestTest, keep_prob: 1.0})
+    #print(units.shape)
+    #for b in range(32):
+    #    im3 = units[0,:,:,0]
+    #    fname = 'CNNWeightRes/Activations%05d.png' % (b)
+    #    misc.imsave(fname, im3)
+    imageToUse = TestTest[0,:,:,0]
+    plt.imshow(imageToUse, interpolation="nearest", cmap="gray")
+    #plt.show()
+    #input()
+    #plt.ion()
+    print(units.shape[3])
+    filters = units.shape[3]
+    plt.figure(1, figsize=(20, 20))
+    n_columns = 6
+    n_rows = math.ceil(filters / n_columns) + 1
+    for i in range(filters):
+        plt.subplot(n_rows, n_columns, i + 1)
+        plt.title('Filter ' + str(i))
+        plt.imshow(units[0, :, :, i], interpolation="nearest", cmap="gray")
+
+    fname = 'CNNWeightRes/Activations1L%05d.png' % (m)
+    pylab.savefig(fname)
+    plt.clf()
+    #plt.show()
+    #input()
+    #im3 = units[0,:,:,0]
+    #fname = 'CNNWeightRes/Activations%05d.png' % (b)
+    #misc.imsave(fname, im3)
+
+for m in range(nclass):
+    TestTest[0,:,:,:] = Test[m*ntest,:,:,:]
+    LTestTest[0,:] = LTest[m*ntest,:]#np.zeros((ntest*nclass,nclass))
+
+    summary_str, units = sess.run([summary_op, h_conv2],feed_dict={tf_data: TestTest,tf_labels: LTestTest, keep_prob: 1.0})
+    imageToUse = TestTest[0,:,:,0]
+    plt.imshow(imageToUse, interpolation="nearest", cmap="gray")
+    print(units.shape[3])
+    filters = units.shape[3]
+    plt.figure(1, figsize=(20, 20))
+    n_columns = 6
+    n_rows = math.ceil(filters / n_columns) + 1
+    for i in range(filters):
+        plt.subplot(n_rows, n_columns, i + 1)
+        plt.title('Filter ' + str(i))
+        plt.imshow(units[0, :, :, i], interpolation="nearest", cmap="gray")
+
+    fname = 'CNNWeightRes/Activations2L%05d.png' % (m)
+    pylab.savefig(fname)
+    plt.clf()
+
+
+#for i in range(filters):
+#    plt.subplot(n_rows, n_columns, i + 1)
+#    plt.title('Filter ' + str(i))
+#    plt.imshow(units[0, :, :, i], interpolation="nearest", cmap="gray")
+
+
+#plotNNFilter(units)
+#getActivations(hcon1, TestTest)
+#getActivations(hcon2, TestTest)
+
+
+
+
 pl1 = plt.scatter(stepAcc, trainAcc)
-fname = 'Train_Accuracy.png'
+fname = 'accCNN/Train_Accuracy.png'
 pylab.savefig(fname)
 plt.clf()
 pl1 = plt.scatter(stepAcc, testAcc)
-fname = 'Test_Accuracy.png'
+fname = 'accCNN/Test_Accuracy.png'
 pylab.savefig(fname)
 plt.clf()
+
+
+#pl1 = plt.scatter(stepAcc, trainAcc)
+#fname = 'accCNN/Train_Accuracy.png'
+#pylab.savefig(fname)
+#plt.clf()
+#pl1 = plt.scatter(stepAcc, testAcc)
+#fname = 'accCNN/Test_Accuracy.png'
+#pylab.savefig(fname)
+#plt.clf()
+#acthcon1 = []
+#acthcon2 = []
 #plt.show()
 
 #mp.image.imsave(fname, pl1, vmin=None, vmax=None, cmap=None, format=None, origin=None, dpi=100)
@@ -308,15 +499,15 @@ plt.clf()
 #mp.image.imsave(fname, pl1, vmin=None, vmax=None, cmap=None, format=None, origin=None, dpi=100)
 
 # test
-wcon1 = sess.run([W_conv1], feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 1.0})
+wcon1 = W_conv1.eval() #sess.run([W_conv1], feed_dict={tf_data: batch_xs, tf_labels: batch_ys, keep_prob: 1.0})
 
 for b in range(32):
-    im3 = wcon1[0][:,:,0,b]
+    im3 = wcon1[:,:,0,b]
     #print(im3)
     #print(type(im3))#wcon1[0][:,:,0,b])
     #print(im3.shape)
     #print(type(img))
-    fname = 'Weights%05d.png' % (b)
+    fname = 'CNNWeightRes/Weights%05d.png' % (b)
     misc.imsave(fname, im3)
     #print(b)
     #print(len(wcon1[0][0][0][0]))
